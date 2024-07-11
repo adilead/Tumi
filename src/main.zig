@@ -1,5 +1,6 @@
 const std = @import("std");
-const tokenizer = @import("tokenizer.zig");
+pub const tokenizer = @import("tokenizer.zig");
+pub const tm = @import("tm.zig");
 const Allocator = std.mem.Allocator;
 
 const stdout = std.io.getStdOut().writer();
