@@ -1,5 +1,6 @@
 const std = @import("std");
 pub const tokenizer = @import("tokenizer.zig");
+pub const Parser = @import("parser.zig");
 pub const tm = @import("tm.zig");
 const Allocator = std.mem.Allocator;
 
@@ -42,7 +43,15 @@ pub fn main() !void {
 pub fn runFile(alloc: Allocator, buff: [:0]const u8) !void {
     var scanner = tokenizer.Tokenizer.init(buff);
     const tokens = try scanner.tokenize(alloc);
-    _ = tokens;
+
+    var parser = Parser.init(alloc, tokens.items, buff);
+    defer parser.deinit();
+
+    var ast_tree = parser.parse() catch {
+        // try parser.printError();
+        return;
+    };
+    defer ast_tree.deinit();
 }
 
 pub fn readFile(alloc: Allocator, file_path: [:0]const u8) ![:0]const u8 {

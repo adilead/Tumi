@@ -43,7 +43,7 @@ pub const TuringMachine = struct {
             const read_symbol = try tape.read(self.pos);
             const transition = self.transitions.get([_]usize{ self.curr_state, read_symbol });
             if (transition) |t| {
-                try tape.write(self.pos, transition.?.write_symbol);
+                try tape.write(self.pos, t.write_symbol);
                 switch (t.move) {
                     .moveLeft => self.pos -= 1,
                     .moveRight => self.pos += 1,

@@ -31,11 +31,18 @@ pub const Token = struct {
             .move_right => "->",
             .stay => ".",
             .new_line => "\n",
+            .comma => ",",
+            .invalid => "invalid",
+            .eof => "eof",
         };
     }
 
     pub fn getKeyword(bytes: []const u8) ?Tag {
         return keywords.get(bytes);
+    }
+
+    pub fn isKeyword(self: *const Token) bool {
+        return keywords.get(lexeme(self.tag).?) != null;
     }
 };
 
