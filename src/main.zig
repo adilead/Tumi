@@ -48,7 +48,7 @@ pub fn runFile(alloc: Allocator, buff: [:0]const u8) !void {
     defer parser.deinit();
 
     var ast_tree = parser.parse() catch {
-        // try parser.printError();
+        try parser.printError();
         return;
     };
     defer ast_tree.deinit();

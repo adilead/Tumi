@@ -3,6 +3,8 @@ const Allocator = std.mem.Allocator;
 
 //Inspired by std/zig/tokenizer.zig
 
+//TODO remove empty lines -> if last token is a \n, don't add new ones
+
 pub const Token = struct {
     tag: Tag,
     loc: Loc,
@@ -12,14 +14,13 @@ pub const Token = struct {
         end: usize,
     };
 
-    //TODO Do I really need this?
-    pub const keywords = std.StaticStringMap(Tag).initComptime(.{ .{ "run", .run }, .{ "trace", .trace }, .{ "render", .render }, .{ "<H>", .halt }, .{ "->", .move_right }, .{ "<-", .move_left }, .{ "--", .stay } });
+    pub const keywords = std.StaticStringMap(Tag).initComptime(.{ .{ "run", .run }, .{ "trace", .trace }, .{ "render", .render }, .{ "->", .move_right }, .{ "<-", .move_left }, .{ "--", .stay } });
 
     pub const Tag = enum { run, trace, render, halt, square_bracket_left, square_bracket_right, colon, move_left, move_right, stay, new_line, comma, symbol, invalid, eof };
 
     pub fn lexeme(tag: Tag) ?[]const u8 {
         return switch (tag) {
-            .symbol => null,
+            .symbol => "symbol",
             .run => "run",
             .trace => "trace",
             .render => "render",
@@ -109,6 +110,11 @@ pub const Tokenizer = struct {
                         self.index += 1;
                         break;
                     },
+                    ',' => {
+                        result.tag = .comma;
+                        self.index += 1;
+                        break;
+                    },
                     'a'...'z', 'A'...'Z', '_', '0'...'9', '-', '<', '>', '.' => {
                         result.tag = .symbol;
                         state = .symbol;
@@ -149,7 +155,7 @@ pub const Tokenizer = struct {
 };
 
 test "keywords" {
-    try testTokenize("run trace render <H> -> <- --", &.{ .run, .trace, .render, .halt, .move_right, .move_left, .stay });
+    try testTokenize("run trace render <H> -> <- --", &.{ .run, .trace, .render, .symbol, .move_right, .move_left, .stay });
 }
 
 test "symbols" {
