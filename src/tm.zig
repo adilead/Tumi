@@ -1,7 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const Move = enum {
+pub const Move = enum {
     moveLeft,
     moveRight,
     stay,
@@ -12,10 +12,10 @@ const BLANK: usize = 0;
 
 pub const TuringMachine = struct {
     //TODO Think about moving the lookup stuff to parsing
-    states: std.StringArrayHashMap(usize),
-    symbols: std.StringArrayHashMap(usize),
+    states: std.StringArrayHashMap(usize), //owns all data
+    symbols: std.StringArrayHashMap(usize), //owns all data
     curr_state: usize,
-    transitions: std.AutoHashMap([2]usize, Transition), //looks up transitions for a state and read symbol
+    transitions: std.AutoHashMap([2]usize, Transition), //looks up transitions for a state and read symbol, owns all data
     pos: i32, //position of the head, we used a signed integer as the head can move to the left as long as it wants
     allocator: Allocator,
     pub fn init(alloc: Allocator) !TuringMachine {
@@ -30,6 +30,13 @@ pub const TuringMachine = struct {
     }
 
     pub fn deinit(self: *@This()) void {
+        for (self.states.keys()) |s| {
+            self.allocator.free(s);
+        }
+        for (self.symbols.keys()) |s| {
+            self.allocator.free(s);
+        }
+
         self.states.deinit();
         self.symbols.deinit();
         self.transitions.deinit();
@@ -57,7 +64,7 @@ pub const TuringMachine = struct {
     }
 };
 
-const Transition = struct {
+pub const Transition = struct {
     from_state: usize,
     read_symbol: usize,
     write_symbol: usize,

@@ -1,1 +1,6 @@
-Hello World
+test:
+a 0 1 -> <H>
+b 0 1 -> <H>
+
+run test 0 [0, 0, 0, 0, 0]
+
