@@ -147,6 +147,9 @@ pub const Tokenizer = struct {
         // const next_token: Token = undefined;
         var token = self.next();
         while (token.tag != .eof) : (token = self.next()) {
+            if (token.tag == .new_line and (token_list.items.len == 0 or token_list.items[token_list.items.len - 1].tag == .new_line)) {
+                continue;
+            }
             try token_list.append(token);
         }
         try token_list.append(token);
@@ -167,7 +170,7 @@ test "wrong zero byte" {
 }
 
 test "new lines" {
-    try testTokenize("\n\nhello\n", &.{ .new_line, .new_line, .symbol, .new_line });
+    try testTokenize("\n\nhello\n\n", &.{ .symbol, .new_line });
 }
 
 test "brackets" {
@@ -176,6 +179,10 @@ test "brackets" {
 
 test "colon" {
     try testTokenize(":", &.{.colon});
+}
+
+test "empty file" {
+    try testTokenize("", &.{});
 }
 
 test "tokenize" {
@@ -193,9 +200,11 @@ test "tokenize" {
 
 fn testTokenize(source: [:0]const u8, expected_token_tags: []const Token.Tag) !void {
     var tokenizer = Tokenizer.init(source);
-    for (expected_token_tags) |expected_token_tag| {
-        const token = tokenizer.next();
-        try std.testing.expectEqual(expected_token_tag, token.tag);
+    const tokens = try tokenizer.tokenize(std.testing.allocator);
+    defer tokens.deinit();
+    for (expected_token_tags, 0..) |expected_token_tag, i| {
+        // const token = tokenizer.next();
+        try std.testing.expectEqual(expected_token_tag, tokens.items[i].tag);
     }
     const last_token = tokenizer.next();
     try std.testing.expectEqual(Token.Tag.eof, last_token.tag);
