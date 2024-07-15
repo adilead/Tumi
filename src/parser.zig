@@ -49,18 +49,21 @@ const TmDecl = struct {
 const TmRun = struct {
     name: AstNodeHandle, //symbol
     pos: AstNodeHandle, //number
+    start_state: AstNodeHandle,
     tape: AstNodeHandle, //tape
 };
 
 const TmTrace = struct {
     name: AstNodeHandle, //symbol
     pos: AstNodeHandle, //number
+    start_state: AstNodeHandle,
     tape: AstNodeHandle, //tape
 };
 
 const TmRender = struct {
     name: AstNodeHandle, //symbol
     pos: AstNodeHandle, //number
+    start_state: AstNodeHandle,
     tape: AstNodeHandle, //tape
 };
 
@@ -243,6 +246,7 @@ pub fn parseNode(self: *Parser, tag: AstNodeTag) !AstNodeHandle {
             const run_node: TmRun = .{
                 .name = try self.parseNode(.symbol),
                 .pos = try self.parseNode(.number),
+                .start_state = try self.parseNode(.symbol),
                 .tape = try self.parseNode(.tape),
             };
             _ = try self.consume(.new_line);
@@ -253,6 +257,7 @@ pub fn parseNode(self: *Parser, tag: AstNodeTag) !AstNodeHandle {
             const run_node: TmTrace = .{
                 .name = try self.parseNode(.symbol),
                 .pos = try self.parseNode(.number),
+                .start_state = try self.parseNode(.symbol),
                 .tape = try self.parseNode(.tape),
             };
             _ = try self.consume(.new_line);
@@ -263,6 +268,7 @@ pub fn parseNode(self: *Parser, tag: AstNodeTag) !AstNodeHandle {
             const run_node: TmRender = .{
                 .name = try self.parseNode(.symbol),
                 .pos = try self.parseNode(.number),
+                .start_state = try self.parseNode(.symbol),
                 .tape = try self.parseNode(.tape),
             };
             _ = try self.consume(.new_line);
@@ -399,7 +405,7 @@ test "parse tape" {
 
 test "parse run" {
     const allocator = std.testing.allocator;
-    const source = "run test 0 [a, b, c, ]\n";
+    const source = "run test 0 x [a, b, c, ]\n";
     var scanner = tokenizer.Tokenizer.init(source);
     const tokens = try scanner.tokenize(allocator);
     defer tokens.deinit();
@@ -408,25 +414,27 @@ test "parse run" {
     const node_idx = try parser.parseNode(.run);
 
     try std.testing.expectEqual(0, node_idx);
-    try std.testing.expectEqual(7, parser.nodes.items.len);
+    try std.testing.expectEqual(8, parser.nodes.items.len);
     try std.testing.expectEqual(AstNodeTag.run, @as(AstNodeTag, parser.nodes.items[node_idx]));
 
     try std.testing.expectEqual(AstNodeTag.symbol, @as(AstNodeTag, parser.nodes.items[1]));
     try std.testing.expectEqual(AstNodeTag.number, @as(AstNodeTag, parser.nodes.items[2]));
-    try std.testing.expectEqual(AstNodeTag.tape, @as(AstNodeTag, parser.nodes.items[3]));
-    try std.testing.expectEqual(AstNodeTag.symbol, @as(AstNodeTag, parser.nodes.items[4]));
+    try std.testing.expectEqual(AstNodeTag.symbol, @as(AstNodeTag, parser.nodes.items[3]));
+    try std.testing.expectEqual(AstNodeTag.tape, @as(AstNodeTag, parser.nodes.items[4]));
     try std.testing.expectEqual(AstNodeTag.symbol, @as(AstNodeTag, parser.nodes.items[5]));
     try std.testing.expectEqual(AstNodeTag.symbol, @as(AstNodeTag, parser.nodes.items[6]));
+    try std.testing.expectEqual(AstNodeTag.symbol, @as(AstNodeTag, parser.nodes.items[7]));
 
     try std.testing.expectEqual(1, parser.nodes.items[0].run.name);
     try std.testing.expectEqual(2, parser.nodes.items[0].run.pos);
-    try std.testing.expectEqual(3, parser.nodes.items[0].run.tape);
-    parser.allocator.free(parser.nodes.items[3].tape.values);
+    try std.testing.expectEqual(3, parser.nodes.items[0].run.start_state);
+    try std.testing.expectEqual(4, parser.nodes.items[0].run.tape);
+    parser.allocator.free(parser.nodes.items[4].tape.values);
 }
 
 test "parse trace" {
     const allocator = std.testing.allocator;
-    const source = "trace test 0 [a, b, c, ]\n";
+    const source = "trace test 0 x [a, b, c, ]\n";
     var scanner = tokenizer.Tokenizer.init(source);
     const tokens = try scanner.tokenize(allocator);
     defer tokens.deinit();
@@ -435,26 +443,28 @@ test "parse trace" {
     const node_idx = try parser.parseNode(.trace);
 
     try std.testing.expectEqual(0, node_idx);
-    try std.testing.expectEqual(7, parser.nodes.items.len);
+    try std.testing.expectEqual(8, parser.nodes.items.len);
     try std.testing.expectEqual(AstNodeTag.trace, @as(AstNodeTag, parser.nodes.items[node_idx]));
 
     try std.testing.expectEqual(AstNodeTag.symbol, @as(AstNodeTag, parser.nodes.items[1]));
     try std.testing.expectEqual(AstNodeTag.number, @as(AstNodeTag, parser.nodes.items[2]));
-    try std.testing.expectEqual(AstNodeTag.tape, @as(AstNodeTag, parser.nodes.items[3]));
-    try std.testing.expectEqual(AstNodeTag.symbol, @as(AstNodeTag, parser.nodes.items[4]));
+    try std.testing.expectEqual(AstNodeTag.symbol, @as(AstNodeTag, parser.nodes.items[3]));
+    try std.testing.expectEqual(AstNodeTag.tape, @as(AstNodeTag, parser.nodes.items[4]));
     try std.testing.expectEqual(AstNodeTag.symbol, @as(AstNodeTag, parser.nodes.items[5]));
     try std.testing.expectEqual(AstNodeTag.symbol, @as(AstNodeTag, parser.nodes.items[6]));
+    try std.testing.expectEqual(AstNodeTag.symbol, @as(AstNodeTag, parser.nodes.items[7]));
 
     try std.testing.expectEqual(1, parser.nodes.items[0].trace.name);
     try std.testing.expectEqual(2, parser.nodes.items[0].trace.pos);
-    try std.testing.expectEqual(3, parser.nodes.items[0].trace.tape);
+    try std.testing.expectEqual(3, parser.nodes.items[0].trace.start_state);
+    try std.testing.expectEqual(4, parser.nodes.items[0].trace.tape);
 
-    parser.allocator.free(parser.nodes.items[3].tape.values);
+    parser.allocator.free(parser.nodes.items[4].tape.values);
 }
 
 test "parse render" {
     const allocator = std.testing.allocator;
-    const source = "render test 0 [a, b, c, ]\n";
+    const source = "render test 0 x [a, b, c, ]\n";
     var scanner = tokenizer.Tokenizer.init(source);
     const tokens = try scanner.tokenize(allocator);
     defer tokens.deinit();
@@ -463,21 +473,23 @@ test "parse render" {
     const node_idx = try parser.parseNode(.render);
 
     try std.testing.expectEqual(0, node_idx);
-    try std.testing.expectEqual(7, parser.nodes.items.len);
+    try std.testing.expectEqual(8, parser.nodes.items.len);
     try std.testing.expectEqual(AstNodeTag.render, @as(AstNodeTag, parser.nodes.items[node_idx]));
 
     try std.testing.expectEqual(AstNodeTag.symbol, @as(AstNodeTag, parser.nodes.items[1]));
     try std.testing.expectEqual(AstNodeTag.number, @as(AstNodeTag, parser.nodes.items[2]));
-    try std.testing.expectEqual(AstNodeTag.tape, @as(AstNodeTag, parser.nodes.items[3]));
-    try std.testing.expectEqual(AstNodeTag.symbol, @as(AstNodeTag, parser.nodes.items[4]));
+    try std.testing.expectEqual(AstNodeTag.symbol, @as(AstNodeTag, parser.nodes.items[3]));
+    try std.testing.expectEqual(AstNodeTag.tape, @as(AstNodeTag, parser.nodes.items[4]));
     try std.testing.expectEqual(AstNodeTag.symbol, @as(AstNodeTag, parser.nodes.items[5]));
     try std.testing.expectEqual(AstNodeTag.symbol, @as(AstNodeTag, parser.nodes.items[6]));
+    try std.testing.expectEqual(AstNodeTag.symbol, @as(AstNodeTag, parser.nodes.items[7]));
 
     try std.testing.expectEqual(1, parser.nodes.items[0].render.name);
     try std.testing.expectEqual(2, parser.nodes.items[0].render.pos);
-    try std.testing.expectEqual(3, parser.nodes.items[0].render.tape);
+    try std.testing.expectEqual(3, parser.nodes.items[0].render.start_state);
+    try std.testing.expectEqual(4, parser.nodes.items[0].render.tape);
 
-    parser.allocator.free(parser.nodes.items[3].tape.values);
+    parser.allocator.free(parser.nodes.items[4].tape.values);
 }
 test "parse transition" {
     const allocator = std.testing.allocator;
@@ -515,6 +527,8 @@ test "parse tm_decl" {
     defer parser.deinit();
 
     const node_idx = try parser.parseNode(.tm_decl);
+    defer parser.allocator.free(parser.nodes.items[0].tm_decl.transitions);
+
     try std.testing.expectEqual(0, node_idx);
     try std.testing.expectEqual(8, parser.nodes.items.len);
     try std.testing.expectEqual(AstNodeTag.tm_decl, @as(AstNodeTag, parser.nodes.items[0]));
@@ -528,12 +542,11 @@ test "parse tm_decl" {
 
     try std.testing.expectEqual(1, parser.nodes.items[0].tm_decl.tm_name);
     try std.testing.expectEqualSlices(AstNodeHandle, &[_]AstNodeHandle{2}, parser.nodes.items[0].tm_decl.transitions);
-    parser.allocator.free(parser.nodes.items[0].tm_decl.transitions);
 }
 
 test "parse ast" {
     const allocator = std.testing.allocator;
-    const source = "name:\nfrom_state read_symbol write_symbol <- <H>\name2:\nfs rs ws -- ns\n run name 0 [0,1,2]\n trace name2 1 [0,1]\n";
+    const source = "name:\nfrom_state read_symbol write_symbol <- <H>\name2:\nfs rs ws -- ns\n run name 0 s [0,1,2]\n trace name2 1 s [0,1]\n";
     var scanner = tokenizer.Tokenizer.init(source);
     const tokens = try scanner.tokenize(allocator);
     defer tokens.deinit();

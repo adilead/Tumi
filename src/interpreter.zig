@@ -1,24 +1,29 @@
 const std = @import("std");
 const tokenizer = @import("tokenizer.zig");
 const tm = @import("tm.zig");
-const parser = @import("parser.zig");
-const Ast = parser.Ast;
+const Parser = @import("parser.zig");
+const Ast = Parser.Ast;
 const Token = tokenizer.Token;
 const Allocator = std.mem.Allocator;
 
 const Self = @This();
 
 pub fn interpret(allocator: Allocator, ast: *const Ast) !void {
-    var turing_machines = std.StringHashMap(tm.TuringMachine).init(allocator);
+    var turing_machines = std.StringArrayHashMap(tm.TuringMachine).init(allocator);
+    var tapes = std.ArrayList(tm.Tape).init(allocator);
     defer {
-        var it = turing_machines.keyIterator();
-        while (it.next()) |name| {
-            allocator.free(name.*);
+        for (turing_machines.keys()) |name| {
+            allocator.free(name);
         }
         turing_machines.deinit();
+        for (tapes.items) |*t| {
+            t.deinit();
+        }
+        tapes.deinit();
     }
     var t_machine = try tm.TuringMachine.init(allocator);
     defer t_machine.deinit();
+    try t_machine.states.put("<H>", 0);
 
     //register all turing machines
     for (ast.nodes[0].root.tm_decls) |decl| {
@@ -35,19 +40,19 @@ pub fn interpret(allocator: Allocator, ast: *const Ast) !void {
 
             //register states and symbols
             if (t_machine.states.get(from_state) == null) {
-                try t_machine.states.put(try allocator.dupe(u8, from_state), t_machine.states.keys().len);
+                try t_machine.states.put(from_state, t_machine.states.keys().len);
             }
 
             if (t_machine.symbols.get(read_symbol) == null) {
-                try t_machine.symbols.put(try allocator.dupe(u8, read_symbol), t_machine.symbols.keys().len);
+                try t_machine.symbols.put(read_symbol, t_machine.symbols.keys().len);
             }
 
             if (t_machine.symbols.get(write_symbol) == null) {
-                try t_machine.symbols.put(try allocator.dupe(u8, write_symbol), t_machine.symbols.keys().len);
+                try t_machine.symbols.put(write_symbol, t_machine.symbols.keys().len);
             }
 
             if (t_machine.states.get(next_state) == null) {
-                try t_machine.states.put(try allocator.dupe(u8, next_state), t_machine.states.keys().len);
+                try t_machine.states.put(next_state, t_machine.states.keys().len);
             }
 
             //register the transition itself
@@ -69,14 +74,36 @@ pub fn interpret(allocator: Allocator, ast: *const Ast) !void {
     }
 
     //then, run them using the given command
-    // for (ast.nodes[0].root.tm_runs) |tr| {
+    for (ast.nodes[0].root.tm_runs) |tr| {
+        switch (ast.nodes[tr]) {
+            .run => |*run| {
+                const name = ast.nodes[run.name].symbol.value;
+                var curr_tm = turing_machines.get(name).?;
+                try tapes.append(try tm.Tape.init(allocator, ast.nodes[run.tape].tape.values));
+                const pos = ast.nodes[run.pos].number.number;
+                const start_state = ast.nodes[run.start_state].symbol.value;
+                try std.io.getStdOut().writer().print("Running Turing Machine {s}...\n", .{name});
+                try curr_tm.run(&tapes.items[tapes.items.len - 1], curr_tm.states.get(start_state).?, pos);
+                try curr_tm.printState(null);
+            },
+            else => {
+                unreachable;
+            },
+        }
+    }
+}
 
-    //     switch(ast.nodes[tr]){
-    //         .run => |*run| {},
-    //         else => {},
+test "interpret" {
+    const allocator = std.testing.allocator;
+    const source = "name:\ns 0 1 -> <H>\name2:\nfs rs ws -- ns\n run name 0 s [0,1,2]\n";
+    var scanner = tokenizer.Tokenizer.init(source);
+    const tokens = try scanner.tokenize(allocator);
+    defer tokens.deinit();
+    var parser = Parser.init(allocator, tokens.items, source);
+    defer parser.deinit();
 
-    //     }
-    // }
-    //build a tape
-    //then run
+    var ast = try parser.parse();
+    defer ast.deinit();
+
+    try interpret(allocator, &ast);
 }

@@ -12,8 +12,8 @@ const BLANK: usize = 0;
 
 pub const TuringMachine = struct {
     //TODO Think about moving the lookup stuff to parsing
-    states: std.StringArrayHashMap(usize), //owns all data
-    symbols: std.StringArrayHashMap(usize), //owns all data
+    states: std.StringArrayHashMap(usize), //does not own keys
+    symbols: std.StringArrayHashMap(usize), //does not own keys
     curr_state: usize,
     transitions: std.AutoHashMap([2]usize, Transition), //looks up transitions for a state and read symbol, owns all data
     pos: i32, //position of the head, we used a signed integer as the head can move to the left as long as it wants
@@ -30,12 +30,12 @@ pub const TuringMachine = struct {
     }
 
     pub fn deinit(self: *@This()) void {
-        for (self.states.keys()) |s| {
-            self.allocator.free(s);
-        }
-        for (self.symbols.keys()) |s| {
-            self.allocator.free(s);
-        }
+        // for (self.states.keys()) |s| {
+        //     self.allocator.free(s);
+        // }
+        // for (self.symbols.keys()) |s| {
+        //     self.allocator.free(s);
+        // }
 
         self.states.deinit();
         self.symbols.deinit();
@@ -43,7 +43,7 @@ pub const TuringMachine = struct {
     }
 
     pub fn run(self: *@This(), tape: *Tape, start_state: usize, pos: i32) !void {
-        std.debug.assert(self.states.values()[0] == HALT);
+        std.debug.assert(std.mem.eql(u8, "<H>", self.states.keys()[0]));
         self.pos = pos;
         self.curr_state = start_state;
         while (self.curr_state != HALT) {
@@ -62,6 +62,11 @@ pub const TuringMachine = struct {
             }
         }
     }
+
+    pub fn printState(self: *@This(), tape: ?*const Tape) !void {
+        if (tape == null)
+            try std.io.getStdOut().writer().print("Halted in state {s} on position {d}\n", .{ self.states.keys()[self.curr_state], self.pos });
+    }
 };
 
 pub const Transition = struct {
@@ -72,7 +77,7 @@ pub const Transition = struct {
     next_state: usize,
 };
 
-const Tape = struct {
+pub const Tape = struct {
     const DL = std.DoublyLinkedList([]usize);
 
     allocator: Allocator,

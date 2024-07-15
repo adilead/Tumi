@@ -2,5 +2,5 @@ test:
 a 0 1 -> <H>
 b 0 1 -> <H>
 
-run test 0 [0, 0, 0, 0, 0]
+run test 0 a [0, 0, 0, 0, 0]
 
