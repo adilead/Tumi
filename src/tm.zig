@@ -9,6 +9,7 @@ pub const Move = enum {
 
 const HALT: usize = 0;
 const BLANK: usize = 0;
+var chunk_size: usize = 512;
 
 pub const TuringMachine = struct {
     //TODO Think about moving the lookup stuff to parsing
@@ -78,70 +79,40 @@ pub const Transition = struct {
 };
 
 pub const Tape = struct {
-    const DL = std.DoublyLinkedList([]usize);
-
     allocator: Allocator,
-    chunk_size: usize,
-    // pos: usize,
-    offset: usize, //(num_chunks-1)*chunk_size + tm_pos == pos, offset the number of cells from the first to the original 0 tm position
-    chunks: DL,
-    curr_chunk_idx: usize,
-    curr_chunk: *DL.Node,
     num_chunks: usize,
-    // length: usize,
+    table: std.AutoHashMap(i32, usize),
+    mem: std.ArrayList(usize),
 
     pub fn init(allocator: Allocator, start_tape: []const usize) !Tape {
-        const chunk_size = 1024;
+        // const chunk_size = 512;
         const num_chunks: usize = @divTrunc(start_tape.len, chunk_size) + 1;
-        var chunks = DL{};
-        var start: usize = 0;
-        for (0..num_chunks) |_| {
-            const chunk = try allocator.alloc(usize, chunk_size);
-            @memset(chunk, BLANK);
-            const end = if (start + chunk_size > start_tape.len - start) start_tape.len else start + chunk_size;
-            std.mem.copyForwards(usize, chunk, start_tape[start..end]);
-            chunks.append(try allocator.create(DL.Node));
-            chunks.last.?.data = chunk;
-            start += chunk_size;
-        }
 
-        return .{ .allocator = allocator, .chunk_size = chunk_size, .chunks = chunks, .offset = (chunks.len - 1) * chunk_size, .curr_chunk_idx = 0, .curr_chunk = chunks.last.?, .num_chunks = num_chunks };
+        var table = std.AutoHashMap(i32, usize).init(allocator);
+        var mem = try std.ArrayList(usize).initCapacity(allocator, chunk_size * num_chunks);
+        @memset(mem.items, BLANK);
+
+        for (0..num_chunks) |i| {
+            const offset: i32 = @divTrunc(@as(i32, @intCast(num_chunks)), 2);
+            std.debug.print("{d}, {d}\n", .{ i, offset });
+            try table.put(@as(i32, @intCast(i)) - offset, i * chunk_size);
+            try mem.appendNTimes(BLANK, chunk_size);
+        }
+        std.mem.copyForwards(usize, mem.items[table.get(0).?..], start_tape);
+
+        return .{ .allocator = allocator, .num_chunks = num_chunks, .table = table, .mem = mem };
     }
 
     fn getValueAt(self: *@This(), pos: i32) !*usize {
-        var idx: i32 = @as(i32, @intCast(self.offset)) + pos;
-        if (idx < 0) {
-            const num_new_chunks: usize = @abs(@divTrunc(@as(usize, @intCast(-idx)), self.chunk_size) + 1);
-            for (0..num_new_chunks) |_| {
-                try self.createNewChunk(true);
-            }
-            self.curr_chunk_idx += num_new_chunks;
-        }
-        idx = @as(i32, @intCast(self.offset)) + pos;
-
-        const index: usize = @intCast(idx);
-        //check if last read/write was in the current chunk
-        const c_idx = @divTrunc(index, self.chunk_size);
-        if (c_idx == self.curr_chunk_idx) {
-            return &self.curr_chunk.data[@rem(index, self.chunk_size)];
+        const chunk_id = @divFloor(pos, @as(i32, @intCast(chunk_size)));
+        var mem_offset: usize = undefined;
+        if (self.table.get(chunk_id)) |res| {
+            mem_offset = res;
         } else {
-            if (c_idx >= self.num_chunks) {
-                for (0..(c_idx - self.num_chunks + 1)) |_| {
-                    try self.createNewChunk(false);
-                }
-            }
-            var c: usize = 0;
-            var curr: ?*DL.Node = self.chunks.first;
-            while (curr) |node| : (c += 1) {
-                if (c == c_idx) break;
-                curr = node.next;
-            }
-            self.curr_chunk = curr.?;
-            self.curr_chunk_idx = c_idx;
-            return &self.curr_chunk.data[@rem(index, self.chunk_size)];
+            mem_offset = try self.addChunkToMem(chunk_id);
         }
-        // return self.chunks.items[@divTrunc(index, self.chunk_size)][@rem(index, self.chunk_size)];
-        unreachable;
+        const idx: usize = @as(usize, @abs(@rem(pos, @as(i32, @intCast(chunk_size)))));
+        return &self.mem.items[mem_offset + idx];
     }
 
     pub fn read(self: *@This(), pos: i32) !usize {
@@ -151,31 +122,23 @@ pub const Tape = struct {
         (try self.getValueAt(pos)).* = tape_symbol;
     }
 
-    pub fn createNewChunk(self: *@This(), prepend: bool) !void {
-        const new_chunk = try self.allocator.alloc(usize, self.chunk_size);
-        @memset(new_chunk, BLANK);
+    pub fn addChunkToMem(self: *@This(), new_chunk_handle: i32) !usize {
+        std.debug.assert(self.table.get(new_chunk_handle) == null);
+        const mem_offset = self.mem.items.len;
+        try self.mem.appendNTimes(HALT, chunk_size);
+        try self.table.put(new_chunk_handle, mem_offset);
         self.num_chunks += 1;
-        if (prepend) {
-            self.chunks.prepend(try self.allocator.create(DL.Node));
-            self.chunks.first.?.data = new_chunk;
-            self.offset += self.chunk_size;
-        } else {
-            self.chunks.append(try self.allocator.create(DL.Node));
-            self.chunks.last.?.data = new_chunk;
-        }
+        return mem_offset;
     }
 
     pub fn deinit(self: *@This()) void {
-        var node: ?*DL.Node = self.chunks.first;
-        while (node) |n| {
-            node = n.next;
-            self.allocator.free(n.data);
-            self.allocator.destroy(n);
-        }
+        self.mem.deinit();
+        self.table.deinit();
     }
 };
 
 test "tape" {
+    chunk_size = 1024;
     const allocator = std.testing.allocator;
     var tape = try Tape.init(allocator, &[_]usize{ 1, 2 });
     defer tape.deinit();
