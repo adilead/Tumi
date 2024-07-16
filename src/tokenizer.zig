@@ -158,31 +158,35 @@ pub const Tokenizer = struct {
 };
 
 test "keywords" {
-    try testTokenize("run trace render <H> -> <- --", &.{ .run, .trace, .render, .symbol, .move_right, .move_left, .stay });
+    try testTokenize("run trace render <H> -> <- --", &.{ .run, .trace, .render, .symbol, .move_right, .move_left, .stay }, &[_][]const u8{ "run", "trace", "render", "<H>", "->", "<-", "--" });
 }
 
 test "symbols" {
-    try testTokenize("99 H here h29-j", &.{ .symbol, .symbol, .symbol, .symbol });
+    try testTokenize("99 H here h29-j", &.{ .symbol, .symbol, .symbol, .symbol }, null);
 }
 
 test "wrong zero byte" {
-    try testTokenize("99 \x00 11", &.{ .symbol, .invalid, .symbol });
+    try testTokenize("99 \x00 11", &.{ .symbol, .invalid, .symbol }, null);
 }
 
 test "new lines" {
-    try testTokenize("\n\nhello\n\n", &.{ .symbol, .new_line });
+    try testTokenize("\n\nhello\n\n", &.{ .symbol, .new_line }, null);
 }
 
 test "brackets" {
-    try testTokenize("[]", &.{ .square_bracket_left, .square_bracket_right });
+    try testTokenize("[]", &.{ .square_bracket_left, .square_bracket_right }, &[_][]const u8{ "[", "]" });
+}
+
+test "run" {
+    try testTokenize(" run name 0 x [0,1] ", &.{ .run, .symbol, .symbol, .symbol, .square_bracket_left, .symbol, .comma, .symbol, .square_bracket_right }, &[_][]const u8{ "run", "name", "0", "x", "[", "0", ",", "1", "]" });
 }
 
 test "colon" {
-    try testTokenize(":", &.{.colon});
+    try testTokenize(":", &.{.colon}, null);
 }
 
 test "empty file" {
-    try testTokenize("", &.{});
+    try testTokenize("", &.{}, null);
 }
 
 test "tokenize" {
@@ -198,13 +202,16 @@ test "tokenize" {
     }
 }
 
-fn testTokenize(source: [:0]const u8, expected_token_tags: []const Token.Tag) !void {
+fn testTokenize(source: [:0]const u8, expected_token_tags: []const Token.Tag, expected_values: ?[]const []const u8) !void {
     var tokenizer = Tokenizer.init(source);
     const tokens = try tokenizer.tokenize(std.testing.allocator);
     defer tokens.deinit();
     for (expected_token_tags, 0..) |expected_token_tag, i| {
         // const token = tokenizer.next();
         try std.testing.expectEqual(expected_token_tag, tokens.items[i].tag);
+        if (expected_values) |values| {
+            try std.testing.expectEqualStrings(values[i], source[tokens.items[i].loc.start..tokens.items[i].loc.end]);
+        }
     }
     const last_token = tokenizer.next();
     try std.testing.expectEqual(Token.Tag.eof, last_token.tag);

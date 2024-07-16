@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 
 pub const Move = enum {
@@ -13,20 +14,22 @@ var chunk_size: usize = 512;
 
 pub const TuringMachine = struct {
     //TODO Think about moving the lookup stuff to parsing
-    states: std.StringArrayHashMap(usize), //does not own keys
-    symbols: std.StringArrayHashMap(usize), //does not own keys
+    states_lookup: *std.StringArrayHashMap(usize), //does not own keys
+    symbols_lookup: *std.StringArrayHashMap(usize), //does not own keys
     curr_state: usize,
     transitions: std.AutoHashMap([2]usize, Transition), //looks up transitions for a state and read symbol, owns all data
     pos: i32, //position of the head, we used a signed integer as the head can move to the left as long as it wants
     allocator: Allocator,
-    pub fn init(alloc: Allocator) !TuringMachine {
+    name: []const u8,
+    pub fn init(alloc: Allocator, states: *std.StringArrayHashMap(usize), symbols: *std.StringArrayHashMap(usize), name: []const u8) !TuringMachine {
         return .{
-            .states = std.StringArrayHashMap(usize).init(alloc),
-            .symbols = std.StringArrayHashMap(usize).init(alloc),
+            .states_lookup = states,
+            .symbols_lookup = symbols,
             .curr_state = 0,
             .transitions = std.AutoHashMap([2]usize, Transition).init(alloc),
             .pos = 0,
             .allocator = alloc,
+            .name = name,
         };
     }
 
@@ -38,18 +41,24 @@ pub const TuringMachine = struct {
         //     self.allocator.free(s);
         // }
 
-        self.states.deinit();
-        self.symbols.deinit();
+        //         self.states.deinit();
+        //         self.symbols.deinit();
         self.transitions.deinit();
     }
 
     pub fn run(self: *@This(), tape: *Tape, start_state: usize, pos: i32) !void {
-        std.debug.assert(std.mem.eql(u8, "<H>", self.states.keys()[0]));
+        std.debug.assert(std.mem.eql(u8, "<H>", self.states_lookup.keys()[0]));
+        // std.debug.print("--> {d}\n", .{self.transitions.count()});
         self.pos = pos;
         self.curr_state = start_state;
         while (self.curr_state != HALT) {
             const read_symbol = try tape.read(self.pos);
+            // std.debug.print("{d} {d}\n", .{ self.curr_state, read_symbol });
             const transition = self.transitions.get([_]usize{ self.curr_state, read_symbol });
+            // var it = self.transitions.keyIterator();
+            // while (it.next()) |k| {
+            //     std.debug.print("Keys {d} {d}\n", .{ k[0], k[1] });
+            // }
             if (transition) |t| {
                 try tape.write(self.pos, t.write_symbol);
                 switch (t.move) {
@@ -65,8 +74,23 @@ pub const TuringMachine = struct {
     }
 
     pub fn printState(self: *@This(), tape: ?*const Tape) !void {
-        if (tape == null)
-            try std.io.getStdOut().writer().print("Halted in state {s} on position {d}\n", .{ self.states.keys()[self.curr_state], self.pos });
+        const fmt: []const u8 = "Halted in state {s} on position {d}\n";
+        const fmt_transition: []const u8 = "{s} {s} {s} {s} {s}\n";
+        if (tape == null) {}
+        if (builtin.is_test) {
+            std.debug.print(fmt, .{ self.states_lookup.keys()[self.curr_state], self.pos });
+        } else {
+            try std.io.getStdOut().writer().print(fmt, .{ self.states_lookup.keys()[self.curr_state], self.pos });
+        }
+
+        var it = self.transitions.valueIterator();
+        while (it.next()) |tr| {
+            if (builtin.is_test) {
+                std.debug.print(fmt_transition, .{ self.states_lookup.keys()[tr.from_state], self.symbols_lookup.keys()[tr.read_symbol], self.symbols_lookup.keys()[tr.write_symbol], @tagName(tr.move), self.states_lookup.keys()[tr.next_state] });
+            } else {
+                try std.io.getStdOut().writer().print(fmt_transition, .{ self.states_lookup.keys()[tr.from_state], self.symbols_lookup.keys()[tr.read_symbol], self.symbols_lookup.keys()[tr.write_symbol], @tagName(tr.move), self.states_lookup.keys()[tr.next_state] });
+            }
+        }
     }
 };
 
@@ -94,7 +118,7 @@ pub const Tape = struct {
 
         for (0..num_chunks) |i| {
             const offset: i32 = @divTrunc(@as(i32, @intCast(num_chunks)), 2);
-            std.debug.print("{d}, {d}\n", .{ i, offset });
+            // std.debug.print("{d}, {d}\n", .{ i, offset });
             try table.put(@as(i32, @intCast(i)) - offset, i * chunk_size);
             try mem.appendNTimes(BLANK, chunk_size);
         }
@@ -165,9 +189,17 @@ test "tape" {
 
 test "tm run fail state" {
     const allocator = std.testing.allocator;
-    var tm = try TuringMachine.init(allocator);
+
+    var states = std.StringArrayHashMap(usize).init(allocator);
+    defer states.deinit();
+    try states.put("<H>", HALT);
+
+    var symbols = std.StringArrayHashMap(usize).init(allocator);
+    defer symbols.deinit();
+
+    var tm = try TuringMachine.init(allocator, &states, &symbols, "test_tm");
     defer tm.deinit();
-    try tm.states.put("<H>", HALT);
+
     try tm.transitions.put([2]usize{ 1, 1 }, .{ .from_state = 1, .read_symbol = 1, .write_symbol = 1, .move = .moveRight, .next_state = 0 });
     var tape = try Tape.init(allocator, &[_]usize{ 3, 3 });
     defer tape.deinit();
@@ -176,9 +208,17 @@ test "tm run fail state" {
 
 test "tm run" {
     const allocator = std.testing.allocator;
-    var tm = try TuringMachine.init(allocator);
+
+    var states = std.StringArrayHashMap(usize).init(allocator);
+    defer states.deinit();
+    try states.put("<H>", HALT);
+
+    var symbols = std.StringArrayHashMap(usize).init(allocator);
+    defer symbols.deinit();
+
+    var tm = try TuringMachine.init(allocator, &states, &symbols, "test_tm");
     defer tm.deinit();
-    try tm.states.put("<H>", HALT);
+
     try tm.transitions.put([2]usize{ 1, 1 }, .{ .from_state = 1, .read_symbol = 1, .write_symbol = 2, .move = .moveLeft, .next_state = 2 });
     try tm.transitions.put([2]usize{ 2, 1 }, .{ .from_state = 2, .read_symbol = 1, .write_symbol = 3, .move = .moveLeft, .next_state = 3 });
     try tm.transitions.put([2]usize{ 3, BLANK }, .{ .from_state = 3, .read_symbol = BLANK, .write_symbol = 4, .move = .stay, .next_state = 0 });
@@ -190,4 +230,12 @@ test "tm run" {
     try std.testing.expectEqual(2, try tape.read(1));
     try std.testing.expectEqual(3, try tape.read(0));
     try std.testing.expectEqual(4, try tape.read(-1));
+}
+
+test "test" {
+    var hm = std.AutoHashMap([2]usize, usize).init(std.testing.allocator);
+    defer hm.deinit();
+
+    try hm.put([2]usize{ 1, 2 }, 0);
+    try std.testing.expectEqual(0, hm.get([2]usize{ 1, 2 }).?);
 }

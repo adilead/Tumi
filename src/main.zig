@@ -1,8 +1,8 @@
 const std = @import("std");
 pub const tokenizer = @import("tokenizer.zig");
 pub const Parser = @import("parser.zig");
-pub const Interpreter = @import("interpreter.zig");
 pub const tm = @import("tm.zig");
+pub const Interpreter = @import("interpreter.zig");
 const Allocator = std.mem.Allocator;
 
 const stdout = std.io.getStdOut().writer();
@@ -55,7 +55,10 @@ pub fn runFile(alloc: Allocator, buff: [:0]const u8) !void {
     };
     defer ast_tree.deinit();
 
-    try Interpreter.interpret(alloc, &ast_tree);
+    var inter = Interpreter.init(alloc);
+    defer inter.deinit();
+
+    try inter.interpret(alloc, &ast_tree);
 }
 
 pub fn readFile(alloc: Allocator, file_path: [:0]const u8) ![:0]const u8 {
