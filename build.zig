@@ -29,12 +29,28 @@ pub fn build(b: *std.Build) void {
     // running `zig build`).
     b.installArtifact(lib);
 
+    const dep_sokol = b.dependency("sokol", .{
+        .target = target,
+        .optimize = optimize,
+        .with_sokol_imgui = true,
+    });
+    const dep_cimgui = b.dependency("cimgui", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // inject the cimgui header search path into the sokol C library compile step
+    const cimgui_root = dep_cimgui.namedWriteFiles("cimgui").getDirectory();
+    dep_sokol.artifact("sokol_clib").addIncludePath(cimgui_root);
+
     const exe = b.addExecutable(.{
         .name = "tumi",
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
+    exe.root_module.addImport("sokol", dep_sokol.module("sokol"));
+    exe.root_module.addImport("cimgui", dep_cimgui.module("cimgui"));
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default

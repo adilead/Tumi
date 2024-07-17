@@ -4,35 +4,41 @@ pub const Parser = @import("parser.zig");
 pub const tm = @import("tm.zig");
 pub const Interpreter = @import("interpreter.zig");
 const Allocator = std.mem.Allocator;
+const gui = @import("gui.zig");
 
 const stdout = std.io.getStdOut().writer();
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer std.debug.assert(gpa.deinit() == .ok);
+    const alloc = gpa.allocator();
+
     var args = std.process.args();
     _ = args.next();
+
     var file_path: ?[:0]const u8 = null;
-    const alloc = gpa.allocator();
+    defer {
+        if (file_path) |fp| alloc.free(fp);
+    }
+
+    var start_gui = false;
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "--help")) {
             try printHelpMessage();
             return;
+        } else if (std.mem.eql(u8, arg, "--gui")) {
+            start_gui = true;
         } else {
-            file_path = try alloc.dupeZ(u8, arg);
+            file_path = try createAbsPath(alloc, arg);
         }
     }
-    if (file_path == null) {
+    if (file_path == null and !start_gui) {
         try printHelpMessage();
         return;
     }
-    defer alloc.free(file_path.?);
 
-    if (!std.fs.path.isAbsolute(file_path.?)) {
-        const working_dir = std.fs.cwd();
-        const abs_path = try working_dir.realpathAlloc(alloc, file_path.?);
-        defer alloc.free(abs_path);
-        alloc.free(file_path.?);
-        file_path = try alloc.dupeZ(u8, abs_path);
+    if (start_gui) {
+        gui.gui_main();
+        return;
     }
 
     const content = try readFile(alloc, file_path.?);
@@ -79,6 +85,17 @@ pub fn readFile(alloc: Allocator, file_path: [:0]const u8) ![:0]const u8 {
 
 pub fn printHelpMessage() !void {
     try stdout.print("Usage: tumi <file>\n", .{});
+}
+
+fn createAbsPath(allocator: Allocator, file_path: [:0]const u8) ![:0]const u8 {
+    if (!std.fs.path.isAbsolute(file_path)) {
+        const working_dir = std.fs.cwd();
+        const abs_path = try working_dir.realpathAlloc(allocator, file_path);
+        defer allocator.free(abs_path);
+        return try allocator.dupeZ(u8, abs_path);
+    } else {
+        return try allocator.dupeZ(u8, file_path);
+    }
 }
 
 test "test" {
